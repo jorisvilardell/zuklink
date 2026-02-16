@@ -1,51 +1,63 @@
-# Instructions Projet Rust - Architecture Hexagonale
+# Instructions Projet Rust - ZukLink (Distributed Streaming)
 
 ## Contexte du Projet
-Ce projet est un Workspace Rust structuré selon la Clean Architecture (Hexagonale).
+Ce projet est une plateforme de streaming distribuée Cloud-Native (Rust Workspace).
+L'architecture est de type **"Flat Storage / Smart Receiver"** (Stockage S3 à plat + Coordination P2P).
+
 Il est composé de plusieurs crates :
-- `libs/ferrisquote-domain` : Le cœur métier (Entities, Ports, Errors). **Aucune dépendance externe lourde** (DB, HTTP).
-- `libs/ferrisquote-postgres` : Adaptateur d'infrastructure (Implémentation des Repository via SQLx).
-- `libs/ferrisquote-auth` : Logique d'authentification et gestion des identités.
-- `apps/ferrisquote-api` : Point d'entrée de l'application (Axum, Handlers, DTOs, Injection de Dépendances).
+- `libs/zuklink-yellowpage` : **Cœur de la coordination**. Bibliothèque de Gossip Protocol (UDP/TCP) pour la découverte des membres et le Heartbeat.
+- `apps/zuk-bolt` (Sender) : Service d'ingestion **Stateless**. Écrit les données sur S3 (UUID). Ne connaît pas les receivers.
+- `apps/zuk-sink` (Receiver) : Service de traitement **Stateful**. Utilise `yellowpage` pour le Consistent Hashing et polle S3.
 
 ## Commandes Principales
 - Build : `cargo build`
-- Test : `cargo test`
-- Run API : `cargo run -p ferrisquote-api`
+- Test (Unit + Libs) : `cargo test`
+- Run Sender : `cargo run -p zuk-bolt`
+- Run Receiver : `cargo run -p zuk-sink`
+- Infra (Local) : `docker compose up -d`
 - Lint : `cargo clippy -- -D warnings`
 - Format : `cargo fmt`
-- Check DB (SQLx) : `cargo sqlx prepare` (si utilisation de query macros)
 
 ## Règles d'Architecture
 
-### 1. Séparation des Responsabilités
-- **Domain First :** La logique métier réside UNIQUEMENT dans `libs/ferrisquote-domain`. Elle ne doit jamais dépendre de `postgres` ou `axum`.
-- **Ports & Adapters :** Le domaine définit des traits (Ports) pour les accès données. `libs/ferrisquote-postgres` implémente ces traits.
-- **Dependency Injection :** L'injection se fait manuellement dans le `main.rs` de l'API. Ne pas introduire de framework de DI complexe.
+### 1. Philosophie Distribuée
+- **Shared Nothing :** Les services ne partagent AUCUNE base de données (type Redis/SQL). Le seul état partagé est le bucket S3 (Données) et la vue réseau (Gossip).
+- **Flat Storage :** S3 est la source de vérité. Le Sender écrit des fichiers avec des noms aléatoires (UUID). Pas de structure de dossiers complexe imposée par le Sender.
+- **Smart Receiver :** Toute l'intelligence de répartition de charge réside dans le Receiver (Client-Side Sharding).
 
-### 2. Gestion des Erreurs
-- **Libraries (Domain/Infra) :** Utiliser `thiserror` pour définir des énums d'erreurs typées et précises.
-- **Applications (API) :** Utiliser `anyhow` pour la gestion d'erreurs au niveau top-level (main), mais mapper les erreurs de domaine vers des réponses HTTP appropriées dans les handlers.
-- **Pas de Panic :** Interdiction d'utiliser `.unwrap()` ou `.expect()` sauf dans les tests ou au démarrage de l'application (configuration).
+### 2. Séparation des Responsabilités
+- **Libs vs Apps :** `zuklink-yellowpage` ne doit jamais dépendre de la logique métier de `bolt` ou `sink`. Elle fournit juste une `View` du cluster.
+- **Async First :** Tout est asynchrone (Tokio). Les appels S3 et Réseau ne doivent jamais bloquer le thread principal.
 
-### 3. Standards de Code (Rust Idiomatic)
-- **NewType Pattern :** Utiliser des types forts pour les IDs (ex: `FlowId(Uuid)`) plutôt que des `String` ou `Uuid` nus.
-- **Async/Await :** Tout le code I/O est asynchrone (Tokio).
-- **SQLx :** Utiliser `sqlx` sans ORM. Préférer les requêtes SQL explicites. Utiliser `PgPool` encapsulé dans des Repositories.
-- **Tracing :** Utiliser la crate `tracing` pour les logs (info!, error!, instrument).
+### 3. Gestion des Erreurs & Concurrence
+- **Erreurs :**
+    - `libs/*` : Utiliser `thiserror` pour des erreurs typées (ex: `GossipError`, `DiscoveryError`).
+    - `apps/*` : Utiliser `anyhow` pour le top-level.
+- **Verrous :** Utiliser STRICTEMENT `tokio::sync::RwLock` (pas `std::sync`) pour les états partagés comme la `ClusterView` dans la Yellowpage.
+- **Panic :** Interdit en production. Gérer les timeouts S3 et réseau proprement.
 
-### 4. Structure des Handlers (API)
-- Les handlers doivent recevoir un `State<AppState>` contenant les services.
-- Toujours utiliser des DTOs (`CreateRequest`, `Response`) pour les entrées/sorties API. Ne jamais exposer les entités du domaine directement en JSON.
-- Utiliser le trait `Validate` (crate `validator`) pour valider les DTOs en entrée.
+### 4. Standards de Code (Rust Idiomatic)
+- **Tracing :** Utiliser la crate `tracing` avec des spans pour suivre le cheminement d'un paquet ou d'un événement Gossip.
+- **Configuration :** Utiliser des variables d'environnement (12-Factor App) pour la config (S3 Endpoint, Ports).
+- **Types Forts :** Ne pas passer des `String` pour des adresses. Utiliser `SocketAddr` ou des types dédiés `NodeId`.
 
-## Exemple d'Implémentation Repository (Pattern attendu)
+## Exemple de Logique Sharding (Pattern attendu dans Receiver)
+
+Le Receiver doit filtrer les fichiers S3 sans coordination centrale :
+
 ```rust
-impl FlowRepository for PostgresFlowRepository {
-    fn get_flow(&self, id: FlowId) -> impl Future<Output = Result<Flow, DomainError>> + Send {
-        async move {
-            // Utilisation de sqlx::query_as! ou query_as
-            // Mapping manuel de la structure DB vers l'entité Domain
-        }
-    }
+/// Détermine si ce Receiver doit traiter le fichier donné
+/// Basé sur le Consistent Hashing (Rendezvous Hashing ou Modulo simple)
+fn should_process_file(filename: &str, my_node_index: usize, cluster_size: usize) -> bool {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    if cluster_size == 0 { return false; }
+
+    let mut hasher = DefaultHasher::new();
+    filename.hash(&mut hasher);
+    let hash = hasher.finish();
+
+    // Répartition déterministe
+    (hash as usize % cluster_size) == my_node_index
 }
