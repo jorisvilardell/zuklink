@@ -1,0 +1,37 @@
+[package]
+name = "zuklink-yellowpage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Gossip-based cluster coordination library for distributed streaming"
+
+[dependencies]
+# Async Runtime
+tokio = { workspace = true, features = ["sync", "time", "net", "rt-multi-thread", "macros"] }
+
+# Tracing
+tracing = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error Handling
+thiserror = { workspace = true }
+
+# Networking
+bytes = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tracing-subscriber = { workspace = true }
+
+[lib]
+name = "zuklink_yellowpage"
+path = "src/lib.rs"
