@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "libs/zuklink-domain",
     "libs/zuklink-yellowpage",
     "apps/zuk-bolt",
     "apps/zuk-sink",

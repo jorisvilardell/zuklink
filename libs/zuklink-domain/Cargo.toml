@@ -1,0 +1,29 @@
+[package]
+name = "zuklink-domain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Domain layer for ZukLink distributed streaming platform - Pure business logic and ports"
+
+[dependencies]
+# Serialization for domain entities
+serde = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# UUID for segment identification
+uuid = { workspace = true }
+
+# Time for timestamps
+chrono = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+
+[lib]
+name = "zuklink_domain"
+path = "src/lib.rs"
