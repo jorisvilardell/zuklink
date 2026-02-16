@@ -41,6 +41,10 @@ Il est composé de plusieurs crates :
 - **Configuration :** Utiliser des variables d'environnement (12-Factor App) pour la config (S3 Endpoint, Ports).
 - **Types Forts :** Ne pas passer des `String` pour des adresses. Utiliser `SocketAddr` ou des types dédiés `NodeId`.
 
+### 5. Dépendances Spécifiques
+- **Coordination :** Utiliser la crate `chitchat` (Quickwit) dans `libs/zuklink-yellowpage`. Ne pas réimplémenter de protocole Gossip manuel.
+- **Abstraction :** `yellowpage` doit wrapper `chitchat` pour exposer une API simple (`get_live_nodes()`) adaptée au besoin de Sharding de ZukLink.
+
 ## Exemple de Logique Sharding (Pattern attendu dans Receiver)
 
 Le Receiver doit filtrer les fichiers S3 sans coordination centrale :
