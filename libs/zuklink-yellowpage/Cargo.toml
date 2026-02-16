@@ -9,6 +9,9 @@ repository.workspace = true
 description = "Gossip-based cluster coordination library for distributed streaming"
 
 [dependencies]
+# Cluster Coordination (Quickwit's Chitchat)
+chitchat = "0.10"
+
 # Async Runtime
 tokio = { workspace = true, features = ["sync", "time", "net", "rt-multi-thread", "macros"] }
 
@@ -21,6 +24,7 @@ serde_json = { workspace = true }
 
 # Error Handling
 thiserror = { workspace = true }
+anyhow = { workspace = true }
 
 # Networking
 bytes = { workspace = true }
