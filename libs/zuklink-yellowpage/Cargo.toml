@@ -20,17 +20,10 @@ tracing = { workspace = true }
 
 # Serialization
 serde = { workspace = true }
-serde_json = { workspace = true }
 
 # Error Handling
 thiserror = { workspace = true }
 anyhow = { workspace = true }
-
-# Networking
-bytes = { workspace = true }
-
-# Time
-chrono = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

@@ -3044,11 +3044,8 @@ name = "zuklink-yellowpage"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bytes",
  "chitchat",
- "chrono",
  "serde",
- "serde_json",
  "thiserror",
  "tokio",
  "tracing",

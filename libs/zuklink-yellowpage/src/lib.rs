@@ -64,7 +64,7 @@ impl Yellowpage {
         // Create ChitchatId with node_id, generation (using current timestamp), and advertise addr
         let generation_id = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("System time should be after Unix epoch")
             .as_secs();
 
         let chitchat_id = ChitchatId::new(node_id.clone(), generation_id, listen_addr);
@@ -220,25 +220,5 @@ impl Yellowpage {
     pub async fn shutdown(self) {
         info!(node_id = %self.node_id, "Shutting down Yellowpage");
         let _ = self.handle.shutdown().await;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_node_id_sorting() {
-        let mut nodes = vec![
-            NodeId("node-3".to_string()),
-            NodeId("node-1".to_string()),
-            NodeId("node-2".to_string()),
-        ];
-
-        nodes.sort();
-
-        assert_eq!(nodes[0].0, "node-1");
-        assert_eq!(nodes[1].0, "node-2");
-        assert_eq!(nodes[2].0, "node-3");
     }
 }

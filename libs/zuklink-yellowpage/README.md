@@ -116,14 +116,14 @@ Each node:
 
 ## Configuration
 
-Yellowpage is configured at initialization:
+Yellowpage is configured at initialization via the `new()` method parameters:
 
 ```rust
-let config = YellowpageConfig {
-    node_id: "receiver-1".to_string(),
-    listen_addr: "0.0.0.0:7000".parse()?,
-    seeds: vec!["receiver-2:7000".to_string()],
-};
+let yellowpage = Yellowpage::new(
+    "receiver-1".to_string(),           // node_id
+    "0.0.0.0:7000".parse()?,           // listen_addr
+    vec!["receiver-2:7000".to_string()], // seeds
+).await?;
 ```
 
 ### Environment Variables (for apps)
@@ -145,10 +145,11 @@ cargo run --example simple -p zuklink-yellowpage
 NODE_ID=node-1 cargo run --example simple -p zuklink-yellowpage
 
 # Terminal 2 (joins node-1)
-NODE_ID=node-2 SEEDS=127.0.0.1:7000 cargo run --example simple -p zuklink-yellowpage -- --listen 127.0.0.1:7001
+# Note: You need to modify the example code to use different ports for multiple local nodes
+NODE_ID=node-2 SEEDS=127.0.0.1:7000 cargo run --example simple -p zuklink-yellowpage
 
 # Terminal 3 (joins node-1)
-NODE_ID=node-3 SEEDS=127.0.0.1:7000 cargo run --example simple -p zuklink-yellowpage -- --listen 127.0.0.1:7002
+NODE_ID=node-3 SEEDS=127.0.0.1:7000 cargo run --example simple -p zuklink-yellowpage
 ```
 
 The example will:
