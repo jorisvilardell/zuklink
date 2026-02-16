@@ -10,7 +10,9 @@ L'architecture repose sur trois composants clés :
 1. **Flat Storage (S3)** : Le stockage est la seule source de vérité. Les données sont écrites en vrac (Flat) sous forme de segments immuables.
 2. **Yellowpage (Gossip)** : Les Receivers forment un réseau Peer-to-Peer pour maintenir une vue synchronisée du cluster (`ClusterView`).
 3. **Dynamic Sharding** : Chaque Receiver utilise la `ClusterView` pour filtrer mathématiquement les fichiers qu'il doit traiter (Consistent Hashing).
-![Workflow](./docs/workflow-zuklink-yellowpage-v1.jpeg)
+4. **Smart Receiver** : Les Receivers sont des services autonomes qui s'auto-organisent pour traiter le flux en parallèle. Ils utilisent la `ClusterView` pour décider quelles données ils doivent traiter.
+
+![Workflow ZukLink-Yellowpage](docs/workflows/workflow-zuklink-yellowpage-v1.jpeg)
 
 
 ## 📂 Structure du Workspace
@@ -23,8 +25,9 @@ Ce projet est un Workspace Rust standard.
 | `apps/zuk-bolt` | Bin | **Sender**. Service d'ingestion ("Dumb Writer"). Il reçoit les données et les persiste sur S3 avec un nom unique (UUID). Aucune logique de partitionnement. |
 | `apps/zuk-sink` | Bin | **Receiver**. Service de traitement ("Smart Reader"). Il polle S3 et ne télécharge que les fichiers qui lui sont assignés par l'algorithme de hachage. |
 
+
 ## ⚙️ Fonctionnement Technique
-![Workflow](./docs/workflow-zuklink-v1.png)
+![Workflow Global ZukLink](docs/workflows/workflow-zuklink-v1.png)
 
 ### 1. Ingestion (Zuk-Bolt)
 
