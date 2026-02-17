@@ -4,7 +4,7 @@ members = [
     "libs/zuklink-domain",
     "libs/zuklink-yellowpage",
     "apps/zuk-bolt",
-    "apps/zuk-sink",
+    "apps/zuk-sink", "libs/zuklink-s3",
 ]
 
 [workspace.package]
