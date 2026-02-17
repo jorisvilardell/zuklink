@@ -39,13 +39,17 @@ aws-config = "1.5"
 bytes = "1.7"
 
 # UUID Generation
-uuid = { version = "1.10", features = ["v4", "serde"] }
+uuid = { version = "1.10", features = ["v7", "serde"] }
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 
 # Config
 dotenvy = "0.15"
+
+# Testing
+mockall = "0.13"
+async-trait = "0.1"
 
 [profile.release]
 opt-level = 3

@@ -6,56 +6,8 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use uuid::Uuid;
 
-/// Unique identifier for a Segment
-///
-/// SegmentId is a wrapper around UUID v4 to provide type safety and prevent
-/// mixing up segment IDs with other UUIDs in the system.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct SegmentId(Uuid);
-
-impl SegmentId {
-    /// Generate a new random SegmentId
-    pub fn new() -> Self {
-        Self(Uuid::new_v4())
-    }
-
-    /// Create a SegmentId from an existing UUID
-    pub fn from_uuid(uuid: Uuid) -> Self {
-        Self(uuid)
-    }
-
-    /// Get the inner UUID value
-    pub fn as_uuid(&self) -> &Uuid {
-        &self.0
-    }
-}
-
-impl Default for SegmentId {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl fmt::Display for SegmentId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<Uuid> for SegmentId {
-    fn from(uuid: Uuid) -> Self {
-        Self(uuid)
-    }
-}
-
-impl From<SegmentId> for Uuid {
-    fn from(id: SegmentId) -> Self {
-        id.0
-    }
-}
+use crate::ingestion::ids::SegmentId;
 
 /// A Segment represents an immutable chunk of ingested data
 ///
@@ -67,7 +19,7 @@ impl From<SegmentId> for Uuid {
 /// # Example
 ///
 /// ```rust
-/// use zuklink_domain::ingestion::{Segment, SegmentId};
+/// use zuklink_domain::ingestion::entity::Segment;
 ///
 /// let segment = Segment::new(vec![1, 2, 3, 4]);
 /// println!("Created segment: {}", segment.id());
@@ -212,13 +164,5 @@ mod tests {
         assert_eq!(segment.created_at(), &now);
         assert_eq!(segment.storage_key(), Some("data/test.zuk"));
         assert!(segment.is_persisted());
-    }
-
-    #[test]
-    fn test_segment_id_from_uuid() {
-        let uuid = Uuid::new_v4();
-        let segment_id = SegmentId::from_uuid(uuid);
-
-        assert_eq!(segment_id.as_uuid(), &uuid);
     }
 }

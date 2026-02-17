@@ -23,6 +23,8 @@ chrono = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
+mockall = { workspace = true }
+async-trait = { workspace = true }
 
 [lib]
 name = "zuklink_domain"

@@ -9,8 +9,9 @@
 //! We use native Rust async traits with `impl Future` return types instead of
 //! `async_trait` to ensure zero-cost abstractions and static dispatch.
 
-use crate::ingestion::{IngestionError, Segment, SegmentId};
 use std::future::Future;
+
+use crate::ingestion::{entity::Segment, error::IngestionError, ids::SegmentId};
 
 /// Port for storage operations
 ///
@@ -99,124 +100,4 @@ pub trait StorageRepository: Send + Sync {
         &self,
         segment_id: &SegmentId,
     ) -> impl Future<Output = Result<(), IngestionError>> + Send;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Mock implementation for testing
-    struct MockStorage {
-        should_fail: bool,
-    }
-
-    impl StorageRepository for MockStorage {
-        fn save(
-            &self,
-            segment: &Segment,
-            _data: &[u8],
-        ) -> impl Future<Output = Result<String, IngestionError>> + Send {
-            let should_fail = self.should_fail;
-            let key = format!("mock/{}", segment.id());
-            async move {
-                if should_fail {
-                    Err(IngestionError::storage_failure("Mock failure"))
-                } else {
-                    Ok(key)
-                }
-            }
-        }
-
-        fn get(
-            &self,
-            _segment_id: &SegmentId,
-        ) -> impl Future<Output = Result<Vec<u8>, IngestionError>> + Send {
-            let should_fail = self.should_fail;
-            async move {
-                if should_fail {
-                    Err(IngestionError::storage_failure("Mock failure"))
-                } else {
-                    Ok(vec![1, 2, 3])
-                }
-            }
-        }
-
-        fn exists(
-            &self,
-            _segment_id: &SegmentId,
-        ) -> impl Future<Output = Result<bool, IngestionError>> + Send {
-            let should_fail = self.should_fail;
-            async move {
-                if should_fail {
-                    Err(IngestionError::storage_failure("Mock failure"))
-                } else {
-                    Ok(true)
-                }
-            }
-        }
-
-        fn delete(
-            &self,
-            _segment_id: &SegmentId,
-        ) -> impl Future<Output = Result<(), IngestionError>> + Send {
-            let should_fail = self.should_fail;
-            async move {
-                if should_fail {
-                    Err(IngestionError::storage_failure("Mock failure"))
-                } else {
-                    Ok(())
-                }
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_mock_storage_save_success() {
-        let storage = MockStorage { should_fail: false };
-        let segment = Segment::new(vec![1, 2, 3]);
-        let data = vec![1, 2, 3];
-
-        let result = storage.save(&segment, &data).await;
-        assert!(result.is_ok());
-        assert!(result.unwrap().starts_with("mock/"));
-    }
-
-    #[tokio::test]
-    async fn test_mock_storage_save_failure() {
-        let storage = MockStorage { should_fail: true };
-        let segment = Segment::new(vec![1, 2, 3]);
-        let data = vec![1, 2, 3];
-
-        let result = storage.save(&segment, &data).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_mock_storage_get_success() {
-        let storage = MockStorage { should_fail: false };
-        let segment_id = SegmentId::new();
-
-        let result = storage.get(&segment_id).await;
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), vec![1, 2, 3]);
-    }
-
-    #[tokio::test]
-    async fn test_mock_storage_exists() {
-        let storage = MockStorage { should_fail: false };
-        let segment_id = SegmentId::new();
-
-        let result = storage.exists(&segment_id).await;
-        assert!(result.is_ok());
-        assert!(result.unwrap());
-    }
-
-    #[tokio::test]
-    async fn test_mock_storage_delete() {
-        let storage = MockStorage { should_fail: false };
-        let segment_id = SegmentId::new();
-
-        let result = storage.delete(&segment_id).await;
-        assert!(result.is_ok());
-    }
 }

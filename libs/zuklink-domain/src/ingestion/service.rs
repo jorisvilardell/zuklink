@@ -3,8 +3,10 @@
 //! This module contains the core business logic for data ingestion.
 //! The service coordinates between the domain entities and the storage port.
 
-use super::{IngestionError, Segment, SegmentId};
-use crate::ports::StorageRepository;
+use crate::{
+    ingestion::{entity::Segment, error::IngestionError, ids::SegmentId},
+    ports::StorageRepository,
+};
 
 /// Configuration for the ingestion service
 #[derive(Debug, Clone)]
@@ -171,93 +173,244 @@ where
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    use std::future::Future;
     use std::sync::{Arc, Mutex};
 
-    // In-memory storage for testing
-    struct InMemoryStorage {
-        data: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+    /// Mock StorageRepository using builder pattern for testing
+    /// Compatible with RPITIT (Return Position Impl Trait In Trait)
+    #[derive(Clone)]
+    struct MockStorageRepo {
+        save_fn: Arc<dyn Fn(&Segment, &[u8]) -> Result<String, IngestionError> + Send + Sync>,
+        get_fn: Arc<dyn Fn(&SegmentId) -> Result<Vec<u8>, IngestionError> + Send + Sync>,
+        exists_fn: Arc<dyn Fn(&SegmentId) -> Result<bool, IngestionError> + Send + Sync>,
+        delete_fn: Arc<dyn Fn(&SegmentId) -> Result<(), IngestionError> + Send + Sync>,
     }
 
-    impl InMemoryStorage {
+    impl MockStorageRepo {
         fn new() -> Self {
             Self {
-                data: Arc::new(Mutex::new(HashMap::new())),
+                save_fn: Arc::new(|_, _| {
+                    Err(IngestionError::storage_failure("No expectation set"))
+                }),
+                get_fn: Arc::new(|_| Err(IngestionError::storage_failure("No expectation set"))),
+                exists_fn: Arc::new(|_| Err(IngestionError::storage_failure("No expectation set"))),
+                delete_fn: Arc::new(|_| Err(IngestionError::storage_failure("No expectation set"))),
             }
+        }
+
+        fn with_save<F>(mut self, f: F) -> Self
+        where
+            F: Fn(&Segment, &[u8]) -> Result<String, IngestionError> + Send + Sync + 'static,
+        {
+            self.save_fn = Arc::new(f);
+            self
+        }
+
+        fn with_get<F>(mut self, f: F) -> Self
+        where
+            F: Fn(&SegmentId) -> Result<Vec<u8>, IngestionError> + Send + Sync + 'static,
+        {
+            self.get_fn = Arc::new(f);
+            self
+        }
+
+        fn with_exists<F>(mut self, f: F) -> Self
+        where
+            F: Fn(&SegmentId) -> Result<bool, IngestionError> + Send + Sync + 'static,
+        {
+            self.exists_fn = Arc::new(f);
+            self
+        }
+
+        fn with_delete<F>(mut self, f: F) -> Self
+        where
+            F: Fn(&SegmentId) -> Result<(), IngestionError> + Send + Sync + 'static,
+        {
+            self.delete_fn = Arc::new(f);
+            self
         }
     }
 
-    impl StorageRepository for InMemoryStorage {
+    impl StorageRepository for MockStorageRepo {
         fn save(
             &self,
             segment: &Segment,
             data: &[u8],
-        ) -> impl std::future::Future<Output = Result<String, IngestionError>> + Send {
-            let key = format!("data/{}.zuk", segment.id());
-            let data_clone = data.to_vec();
-            let data_map = self.data.clone();
-
-            async move {
-                data_map.lock().unwrap().insert(key.clone(), data_clone);
-                Ok(key)
-            }
+        ) -> impl Future<Output = Result<String, IngestionError>> + Send {
+            let result = (self.save_fn)(segment, data);
+            async move { result }
         }
 
         fn get(
             &self,
             segment_id: &SegmentId,
-        ) -> impl std::future::Future<Output = Result<Vec<u8>, IngestionError>> + Send {
-            let key = format!("data/{}.zuk", segment_id);
-            let data_map = self.data.clone();
-
-            async move {
-                data_map
-                    .lock()
-                    .unwrap()
-                    .get(&key)
-                    .cloned()
-                    .ok_or_else(|| IngestionError::storage_failure("Segment not found"))
-            }
+        ) -> impl Future<Output = Result<Vec<u8>, IngestionError>> + Send {
+            let result = (self.get_fn)(segment_id);
+            async move { result }
         }
 
         fn exists(
             &self,
             segment_id: &SegmentId,
-        ) -> impl std::future::Future<Output = Result<bool, IngestionError>> + Send {
-            let key = format!("data/{}.zuk", segment_id);
-            let data_map = self.data.clone();
-
-            async move { Ok(data_map.lock().unwrap().contains_key(&key)) }
+        ) -> impl Future<Output = Result<bool, IngestionError>> + Send {
+            let result = (self.exists_fn)(segment_id);
+            async move { result }
         }
 
         fn delete(
             &self,
             segment_id: &SegmentId,
-        ) -> impl std::future::Future<Output = Result<(), IngestionError>> + Send {
-            let key = format!("data/{}.zuk", segment_id);
-            let data_map = self.data.clone();
+        ) -> impl Future<Output = Result<(), IngestionError>> + Send {
+            let result = (self.delete_fn)(segment_id);
+            async move { result }
+        }
+    }
 
-            async move {
-                data_map.lock().unwrap().remove(&key);
+    /// Test Builder Pattern for IngestionService tests
+    /// Inspired by Ferriskey's test architecture
+    struct IngestionServiceTestBuilder {
+        storage: MockStorageRepo,
+        config: Option<IngestionConfig>,
+    }
+
+    impl IngestionServiceTestBuilder {
+        fn new() -> Self {
+            Self {
+                storage: MockStorageRepo::new(),
+                config: None,
+            }
+        }
+
+        fn with_successful_save(mut self) -> Self {
+            self.storage = self
+                .storage
+                .with_save(|seg, _| Ok(format!("data/{}.zuk", seg.id())));
+            self
+        }
+
+        fn with_failed_save(mut self, error_msg: &'static str) -> Self {
+            self.storage = self
+                .storage
+                .with_save(move |_, _| Err(IngestionError::storage_failure(error_msg)));
+            self
+        }
+
+        fn with_successful_get(mut self, expected_data: Vec<u8>) -> Self {
+            self.storage = self.storage.with_get(move |_| Ok(expected_data.clone()));
+            self
+        }
+
+        fn with_failed_get(mut self, error_msg: &'static str) -> Self {
+            self.storage = self
+                .storage
+                .with_get(move |_| Err(IngestionError::storage_failure(error_msg)));
+            self
+        }
+
+        fn with_exists(mut self, exists: bool) -> Self {
+            self.storage = self.storage.with_exists(move |_| Ok(exists));
+            self
+        }
+
+        fn with_successful_delete(mut self) -> Self {
+            self.storage = self.storage.with_delete(|_| Ok(()));
+            self
+        }
+
+        fn with_failed_delete(mut self, error_msg: &'static str) -> Self {
+            self.storage = self
+                .storage
+                .with_delete(move |_| Err(IngestionError::storage_failure(error_msg)));
+            self
+        }
+
+        fn with_in_memory_storage(mut self) -> Self {
+            let data: Arc<Mutex<HashMap<String, Vec<u8>>>> = Arc::new(Mutex::new(HashMap::new()));
+
+            let data_clone = data.clone();
+            self.storage = self.storage.with_save(move |seg, bytes| {
+                let key = format!("data/{}.zuk", seg.id());
+                data_clone
+                    .lock()
+                    .unwrap()
+                    .insert(key.clone(), bytes.to_vec());
+                Ok(key)
+            });
+
+            let data_clone = data.clone();
+            self.storage = self.storage.with_get(move |seg_id| {
+                let key = format!("data/{}.zuk", seg_id);
+                data_clone
+                    .lock()
+                    .unwrap()
+                    .get(&key)
+                    .cloned()
+                    .ok_or_else(|| IngestionError::storage_failure("Segment not found"))
+            });
+
+            let data_clone = data.clone();
+            self.storage = self.storage.with_exists(move |seg_id| {
+                let key = format!("data/{}.zuk", seg_id);
+                Ok(data_clone.lock().unwrap().contains_key(&key))
+            });
+
+            let data_clone = data.clone();
+            self.storage = self.storage.with_delete(move |seg_id| {
+                let key = format!("data/{}.zuk", seg_id);
+                data_clone.lock().unwrap().remove(&key);
                 Ok(())
+            });
+
+            self
+        }
+
+        fn with_config(mut self, config: IngestionConfig) -> Self {
+            self.config = Some(config);
+            self
+        }
+
+        fn with_max_segment_size(mut self, max_size: usize) -> Self {
+            let mut config = self.config.take().unwrap_or_default();
+            config.max_segment_size = max_size;
+            self.config = Some(config);
+            self
+        }
+
+        fn with_min_segment_size(mut self, min_size: usize) -> Self {
+            let mut config = self.config.take().unwrap_or_default();
+            config.min_segment_size = min_size;
+            self.config = Some(config);
+            self
+        }
+
+        fn build(self) -> IngestionService<MockStorageRepo> {
+            if let Some(config) = self.config {
+                IngestionService::new(self.storage, config)
+            } else {
+                IngestionService::with_repository(self.storage)
             }
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_ingest_data_success() {
-        let storage = InMemoryStorage::new();
-        let service = IngestionService::with_repository(storage);
+        let service = IngestionServiceTestBuilder::new()
+            .with_successful_save()
+            .build();
 
         let data = vec![1, 2, 3, 4, 5];
         let result = service.ingest_data(data).await;
 
         assert!(result.is_ok());
+        let segment_id = result.unwrap();
+        assert_ne!(segment_id.to_string(), "");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_ingest_empty_data_fails() {
-        let storage = InMemoryStorage::new();
-        let service = IngestionService::with_repository(storage);
+        let service = IngestionServiceTestBuilder::new()
+            .with_successful_save()
+            .build();
 
         let data = vec![];
         let result = service.ingest_data(data).await;
@@ -266,14 +419,12 @@ mod tests {
         assert!(matches!(result.unwrap_err(), IngestionError::EmptySegment));
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_ingest_too_large_data_fails() {
-        let storage = InMemoryStorage::new();
-        let config = IngestionConfig {
-            max_segment_size: 10,
-            min_segment_size: 1,
-        };
-        let service = IngestionService::new(storage, config);
+        let service = IngestionServiceTestBuilder::new()
+            .with_successful_save()
+            .with_max_segment_size(10)
+            .build();
 
         let data = vec![1; 100]; // 100 bytes, exceeds max of 10
         let result = service.ingest_data(data).await;
@@ -285,66 +436,234 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
-    async fn test_get_segment_data() {
-        let storage = InMemoryStorage::new();
-        let service = IngestionService::with_repository(storage);
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_ingest_below_min_size_fails() {
+        let service = IngestionServiceTestBuilder::new()
+            .with_successful_save()
+            .with_min_segment_size(10)
+            .build();
 
+        let data = vec![1, 2, 3]; // 3 bytes, below min of 10
+        let result = service.ingest_data(data).await;
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IngestionError::InvalidData(_)
+        ));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_ingest_with_storage_failure() {
+        let service = IngestionServiceTestBuilder::new()
+            .with_failed_save("S3 unavailable")
+            .build();
+
+        let data = vec![1, 2, 3, 4, 5];
+        let result = service.ingest_data(data).await;
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IngestionError::StorageFailure(_)
+        ));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_get_segment_data_success() {
+        let expected_data = vec![1, 2, 3, 4, 5];
+        let service = IngestionServiceTestBuilder::new()
+            .with_successful_get(expected_data.clone())
+            .build();
+
+        let segment_id = SegmentId::new();
+        let result = service.get_segment_data(&segment_id).await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected_data);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_get_segment_data_not_found() {
+        let service = IngestionServiceTestBuilder::new()
+            .with_failed_get("Segment not found")
+            .build();
+
+        let segment_id = SegmentId::new();
+        let result = service.get_segment_data(&segment_id).await;
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IngestionError::StorageFailure(_)
+        ));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_segment_exists_true() {
+        let service = IngestionServiceTestBuilder::new().with_exists(true).build();
+
+        let segment_id = SegmentId::new();
+        let result = service.segment_exists(&segment_id).await;
+
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_segment_exists_false() {
+        let service = IngestionServiceTestBuilder::new()
+            .with_exists(false)
+            .build();
+
+        let segment_id = SegmentId::new();
+        let result = service.segment_exists(&segment_id).await;
+
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_delete_segment_success() {
+        let service = IngestionServiceTestBuilder::new()
+            .with_successful_delete()
+            .build();
+
+        let segment_id = SegmentId::new();
+        let result = service.delete_segment(&segment_id).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_delete_segment_failure() {
+        let service = IngestionServiceTestBuilder::new()
+            .with_failed_delete("Permission denied")
+            .build();
+
+        let segment_id = SegmentId::new();
+        let result = service.delete_segment(&segment_id).await;
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IngestionError::StorageFailure(_)
+        ));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_full_lifecycle_with_in_memory_storage() {
+        let service = IngestionServiceTestBuilder::new()
+            .with_in_memory_storage()
+            .build();
+
+        // Ingest data
         let data = vec![1, 2, 3, 4, 5];
         let segment_id = service.ingest_data(data.clone()).await.unwrap();
 
-        let retrieved = service.get_segment_data(&segment_id).await.unwrap();
-        assert_eq!(retrieved, data);
-    }
-
-    #[tokio::test]
-    async fn test_segment_exists() {
-        let storage = InMemoryStorage::new();
-        let service = IngestionService::with_repository(storage);
-
-        let data = vec![1, 2, 3];
-        let segment_id = service.ingest_data(data).await.unwrap();
-
+        // Verify it exists
         let exists = service.segment_exists(&segment_id).await.unwrap();
         assert!(exists);
 
-        let non_existent_id = SegmentId::new();
-        let exists = service.segment_exists(&non_existent_id).await.unwrap();
-        assert!(!exists);
-    }
-
-    #[tokio::test]
-    async fn test_delete_segment() {
-        let storage = InMemoryStorage::new();
-        let service = IngestionService::with_repository(storage);
-
-        let data = vec![1, 2, 3];
-        let segment_id = service.ingest_data(data).await.unwrap();
-
-        // Verify it exists
-        assert!(service.segment_exists(&segment_id).await.unwrap());
+        // Retrieve the data
+        let retrieved = service.get_segment_data(&segment_id).await.unwrap();
+        assert_eq!(retrieved, data);
 
         // Delete it
         service.delete_segment(&segment_id).await.unwrap();
 
         // Verify it's gone
-        assert!(!service.segment_exists(&segment_id).await.unwrap());
+        let exists = service.segment_exists(&segment_id).await.unwrap();
+        assert!(!exists);
     }
 
-    #[tokio::test]
-    async fn test_multiple_segments() {
-        let storage = InMemoryStorage::new();
-        let service = IngestionService::with_repository(storage);
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_multiple_segments_isolation() {
+        let service = IngestionServiceTestBuilder::new()
+            .with_in_memory_storage()
+            .build();
 
-        let segment1_id = service.ingest_data(vec![1, 2, 3]).await.unwrap();
-        let segment2_id = service.ingest_data(vec![4, 5, 6]).await.unwrap();
+        let data1 = vec![1, 2, 3];
+        let data2 = vec![4, 5, 6];
+        let data3 = vec![7, 8, 9];
 
+        // Ingest multiple segments
+        let segment1_id = service.ingest_data(data1.clone()).await.unwrap();
+        let segment2_id = service.ingest_data(data2.clone()).await.unwrap();
+        let segment3_id = service.ingest_data(data3.clone()).await.unwrap();
+
+        // Verify all IDs are unique
         assert_ne!(segment1_id, segment2_id);
+        assert_ne!(segment2_id, segment3_id);
+        assert_ne!(segment1_id, segment3_id);
 
-        let data1 = service.get_segment_data(&segment1_id).await.unwrap();
-        let data2 = service.get_segment_data(&segment2_id).await.unwrap();
+        // Verify all data is correctly isolated
+        assert_eq!(service.get_segment_data(&segment1_id).await.unwrap(), data1);
+        assert_eq!(service.get_segment_data(&segment2_id).await.unwrap(), data2);
+        assert_eq!(service.get_segment_data(&segment3_id).await.unwrap(), data3);
 
-        assert_eq!(data1, vec![1, 2, 3]);
-        assert_eq!(data2, vec![4, 5, 6]);
+        // Delete one segment
+        service.delete_segment(&segment2_id).await.unwrap();
+
+        // Verify only the deleted segment is gone
+        assert!(service.segment_exists(&segment1_id).await.unwrap());
+        assert!(!service.segment_exists(&segment2_id).await.unwrap());
+        assert!(service.segment_exists(&segment3_id).await.unwrap());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_config_access() {
+        let config = IngestionConfig {
+            max_segment_size: 1024,
+            min_segment_size: 10,
+        };
+
+        let service = IngestionServiceTestBuilder::new()
+            .with_successful_save()
+            .with_config(config.clone())
+            .build();
+
+        assert_eq!(service.config().max_segment_size, 1024);
+        assert_eq!(service.config().min_segment_size, 10);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_edge_case_min_size_boundary() {
+        let service = IngestionServiceTestBuilder::new()
+            .with_successful_save()
+            .with_min_segment_size(5)
+            .build();
+
+        // Exactly at minimum should succeed
+        let data_at_min = vec![1; 5];
+        let result = service.ingest_data(data_at_min).await;
+        assert!(result.is_ok());
+
+        // One byte below minimum should fail
+        let data_below_min = vec![1; 4];
+        let result = service.ingest_data(data_below_min).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_edge_case_max_size_boundary() {
+        let service = IngestionServiceTestBuilder::new()
+            .with_successful_save()
+            .with_max_segment_size(10)
+            .build();
+
+        // Exactly at maximum should succeed
+        let data_at_max = vec![1; 10];
+        let result = service.ingest_data(data_at_max).await;
+        assert!(result.is_ok());
+
+        // One byte above maximum should fail
+        let data_above_max = vec![1; 11];
+        let result = service.ingest_data(data_above_max).await;
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IngestionError::SegmentTooLarge { .. }
+        ));
     }
 }
