@@ -3,8 +3,10 @@
 //! This module contains the core business logic for data ingestion.
 //! The service coordinates between the domain entities and the storage port.
 
-use super::{IngestionError, Segment, SegmentId};
-use crate::ports::StorageRepository;
+use crate::{
+    ingestion::{entity::Segment, error::IngestionError, ids::SegmentId},
+    ports::StorageRepository,
+};
 
 /// Configuration for the ingestion service
 #[derive(Debug, Clone)]

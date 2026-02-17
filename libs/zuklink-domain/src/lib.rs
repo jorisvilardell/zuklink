@@ -15,21 +15,39 @@
 //!
 //! ## Example
 //!
-//! ```rust
-//! use zuklink_domain::ingestion::{Segment, IngestionService};
-//! use zuklink_domain::ports::StorageRepository;
-//!
-//! // The service is generic over any StorageRepository implementation
-//! async fn example<R: StorageRepository>(service: IngestionService<R>) {
-//!     let data = vec![1, 2, 3, 4];
-//!     let segment_id = service.ingest_data(data).await.unwrap();
-//!     println!("Ingested segment: {}", segment_id);
-//! }
-//! ```
-
+/// ```rust
+/// use zuklink_domain::ingestion::entity::Segment;
+/// use zuklink_domain::ingestion::service::IngestionService;
+/// use zuklink_domain::ports::StorageRepository;
+/// use zuklink_domain::ingestion::error::IngestionError;
+/// use std::future::Future;
+///
+/// // Mock implementation for doc-test
+/// struct MockRepo;
+/// impl StorageRepository for MockRepo {
+///     fn save(&self, segment: &Segment, _data: &[u8]) -> impl Future<Output = Result<String, IngestionError>> + Send {
+///         let key = format!("mock/{}", segment.id());
+///         async move { Ok(key) }
+///     }
+///     fn get(&self, _id: &zuklink_domain::ingestion::ids::SegmentId) -> impl Future<Output = Result<Vec<u8>, IngestionError>> + Send {
+///         async { Ok(vec![]) }
+///     }
+///     fn exists(&self, _id: &zuklink_domain::ingestion::ids::SegmentId) -> impl Future<Output = Result<bool, IngestionError>> + Send {
+///         async { Ok(true) }
+///     }
+///     fn delete(&self, _id: &zuklink_domain::ingestion::ids::SegmentId) -> impl Future<Output = Result<(), IngestionError>> + Send {
+///         async { Ok(()) }
+///     }
+/// }
+///
+/// // The service is generic over any StorageRepository implementation
+/// async fn example() {
+///     let repo = MockRepo;
+///     let service = IngestionService::with_repository(repo);
+///     let data = vec![1, 2, 3, 4];
+///     let segment_id = service.ingest_data(data).await.unwrap();
+///     println!("Ingested segment: {}", segment_id);
+/// }
+/// ```
 pub mod ingestion;
 pub mod ports;
-
-// Re-export commonly used types
-pub use ingestion::{Segment, SegmentId, IngestionService};
-pub use ports::StorageRepository;
