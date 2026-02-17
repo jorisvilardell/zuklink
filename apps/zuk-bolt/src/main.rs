@@ -43,8 +43,8 @@ async fn main() -> Result<()> {
 
     // Get bucket name from environment
     let bucket = std::env::var("ZUKLINK_BUCKET").unwrap_or_else(|_| {
-        info!("ZUKLINK_BUCKET not set, using default: zuklink-data");
-        "zuklink-data".to_string()
+        info!("ZUKLINK_BUCKET not set, using default: zuklink");
+        "zuklink".to_string()
     });
 
     info!(bucket = %bucket, "Initializing S3 storage repository");

@@ -63,7 +63,7 @@ AWS_SECRET_ACCESS_KEY=minioadmin123
 AWS_ENDPOINT_URL=http://localhost:9000
 
 # S3 Bucket (created by docker-compose)
-ZUKLINK_BUCKET=uploads
+ZUKLINK_BUCKET=zuklink
 
 # Server
 BOLT_HOST=0.0.0.0
@@ -85,7 +85,7 @@ RUST_LOG=info
 ### Local Development (MinIO)
 
 ```bash
-# Start MinIO (automatically creates 'uploads' bucket)
+# Start MinIO (automatically creates 'zuklink' bucket)
 docker compose up -d
 
 # Run service
@@ -178,7 +178,7 @@ curl -X POST http://localhost:3000/ingest \
 Files are stored in S3 with flat structure:
 
 ```
-s3://uploads/
+s3://zuklink/
 ├── 550e8400-e29b-41d4-a716-446655440000.zuk
 ├── 6ba7b810-9dad-11d1-80b4-00c04fd430c8.zuk
 └── 7c9e6679-7425-40de-944b-e07fc1f90ae7.zuk
@@ -205,7 +205,7 @@ Structured logs with `tracing`:
 
 ```
 INFO zuk_bolt: Starting ZukBolt sender service
-INFO zuk_bolt: Initializing S3 storage repository bucket="uploads"
+INFO zuk_bolt: Initializing S3 storage repository bucket="zuklink"
 INFO zuk_bolt: Starting HTTP server addr="0.0.0.0:3000"
 INFO ingestion: Received ingest request data_size=5
 INFO ingestion: Successfully ingested segment segment_id="550e8400-..."

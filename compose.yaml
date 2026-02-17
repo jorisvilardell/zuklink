@@ -36,6 +36,7 @@ services:
       /usr/bin/mc alias set myminio http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
       /usr/bin/mc mb myminio/$${ZUKLINK_BUCKET} --ignore-existing;
       /usr/bin/mc anonymous set download myminio/$${ZUKLINK_BUCKET};
+      echo 'WARNING: Bucket configured with anonymous download access. For production, use authenticated access.';
       exit 0;
       "
 
