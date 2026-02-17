@@ -51,3 +51,4 @@
 /// ```
 pub mod ingestion;
 pub mod ports;
+pub mod storage;
