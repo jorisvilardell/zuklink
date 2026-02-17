@@ -66,29 +66,73 @@ fn should_process(filename: &str, my_index: usize, cluster_size: usize) -> bool 
 * **Rust** (Edition 2024)
 * **Docker Compose** (Pour l'environnement local)
 
-### Lancer le Cluster
-
-Le fichier `compose.yaml` démarre MinIO, crée le bucket, lance 1 Sender et 2 Receivers.
-
-```bash
-# Démarrer l'infrastructure
-docker compose up -d
-
-# Voir les logs des Receivers (pour observer la coordination)
-docker compose logs -f receiver
-
-```
-
 ### Configuration
 
-Les services se configurent via variables d'environnement (12-Factor App).
+1. **Copier le fichier de configuration global :**
+
+```bash
+cp .env.example .env
+```
+
+2. **Modifier les variables si nécessaire :**
+
+Le fichier `.env` à la racine du projet contient toutes les configurations :
+
+```bash
+# AWS / S3 Configuration
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=minioadmin
+AWS_SECRET_ACCESS_KEY=minioadmin123
+
+# MinIO Configuration (local development)
+AWS_ENDPOINT_URL=http://localhost:9000
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=minioadmin123
+
+# S3 Bucket Configuration
+ZUKLINK_BUCKET=zuklink
+
+# ZukBolt (Sender) Configuration
+BOLT_HOST=0.0.0.0
+BOLT_PORT=3000
+
+# Logging
+RUST_LOG=info
+```
+
+### Lancer le Cluster
+
+Le fichier `compose.yaml` démarre MinIO et crée automatiquement le bucket configuré dans `.env`.
+
+```bash
+# Démarrer MinIO et créer le bucket
+docker compose up -d
+
+# Vérifier que le bucket est créé
+docker compose logs createbucket
+
+# Lancer l'application zuk-bolt (Sender)
+cargo run -p zuk-bolt
+
+# Accéder à l'API et Swagger UI
+# - API: http://localhost:3000
+# - Swagger UI: http://localhost:3000/swagger-ui
+# - Health: http://localhost:3000/health
+```
+
+### Variables d'Environnement
+
+Toutes les variables sont définies dans le fichier `.env` à la racine :
 
 | Variable | Description | Défaut |
 | --- | --- | --- |
-| `ZUK_S3_ENDPOINT` | URL du stockage S3 | `http://minio:9000` |
-| `ZUK_S3_BUCKET` | Nom du bucket | `zuk-data` |
-| `ZUK_GOSSIP_PORT` | Port d'écoute Yellowpage | `7000` |
-| `ZUK_SEEDS` | Nœuds initiaux pour le Gossip | `receiver-1:7000` |
+| `AWS_ENDPOINT_URL` | URL du stockage S3/MinIO | `http://localhost:9000` |
+| `ZUKLINK_BUCKET` | Nom du bucket S3 | `zuklink` |
+| `MINIO_ROOT_USER` | Utilisateur MinIO | `minioadmin` |
+| `MINIO_ROOT_PASSWORD` | Mot de passe MinIO | `minioadmin123` |
+| `BOLT_HOST` | Host du service zuk-bolt | `0.0.0.0` |
+| `BOLT_PORT` | Port du service zuk-bolt | `3000` |
+| `RUST_LOG` | Niveau de log | `info` |
 
 ## 🛠 Développement
 

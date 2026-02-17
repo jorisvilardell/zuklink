@@ -9,6 +9,10 @@ repository.workspace = true
 description = "Stateless sender service for ZukLink distributed streaming platform"
 
 [dependencies]
+# Internal Dependencies
+zuklink-domain = { path = "../../libs/zuklink-domain" }
+zuklink-s3 = { path = "../../libs/zuklink-s3" }
+
 # Async Runtime
 tokio = { workspace = true }
 
@@ -26,6 +30,13 @@ anyhow = { workspace = true }
 # S3 Client
 aws-sdk-s3 = { workspace = true }
 aws-config = { workspace = true }
+
+# HTTP Server
+axum = "0.7"
+
+# OpenAPI / Swagger
+utoipa = { version = "4", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "7", features = ["axum"] }
 
 # Networking
 bytes = { workspace = true }
