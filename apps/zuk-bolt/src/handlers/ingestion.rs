@@ -17,6 +17,7 @@ use crate::{
     responses(
         (status = 201, description = "Segment ingested successfully", body = IngestResponse),
         (status = 400, description = "Bad request - empty or invalid data", body = ErrorResponse),
+        (status = 409, description = "Conflict - segment already exists", body = ErrorResponse),
         (status = 413, description = "Payload too large", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
