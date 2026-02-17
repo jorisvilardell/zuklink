@@ -3129,6 +3129,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "zuklink-s3"
+version = "0.1.0"
+dependencies = [
+ "aws-config",
+ "aws-sdk-s3",
+ "bytes",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "zuklink-domain",
+]
+
+[[package]]
 name = "zuklink-yellowpage"
 version = "0.1.0"
 dependencies = [

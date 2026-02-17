@@ -6,4 +6,5 @@
 pub mod entity;
 pub mod error;
 pub mod ids;
+pub mod ports;
 pub mod service;

@@ -3,8 +3,12 @@
 //! This module contains the core business logic for data ingestion.
 //! The service coordinates between the domain entities and the storage port.
 
+use std::future::Future;
+
 use crate::{
-    ingestion::{entity::Segment, error::IngestionError, ids::SegmentId},
+    ingestion::{
+        entity::Segment, error::IngestionError, ids::SegmentId, ports::IngestionServicePort,
+    },
     ports::StorageRepository,
 };
 
@@ -166,6 +170,40 @@ where
     /// Get the service configuration
     pub fn config(&self) -> &IngestionConfig {
         &self.config
+    }
+}
+
+// Implement the IngestionServicePort trait for IngestionService
+impl<R> IngestionServicePort for IngestionService<R>
+where
+    R: StorageRepository,
+{
+    fn ingest_data(
+        &self,
+        data: Vec<u8>,
+    ) -> impl Future<Output = Result<SegmentId, IngestionError>> + Send {
+        self.ingest_data(data)
+    }
+
+    fn get_segment_data(
+        &self,
+        segment_id: &SegmentId,
+    ) -> impl Future<Output = Result<Vec<u8>, IngestionError>> + Send {
+        self.get_segment_data(segment_id)
+    }
+
+    fn segment_exists(
+        &self,
+        segment_id: &SegmentId,
+    ) -> impl Future<Output = Result<bool, IngestionError>> + Send {
+        self.segment_exists(segment_id)
+    }
+
+    fn delete_segment(
+        &self,
+        segment_id: &SegmentId,
+    ) -> impl Future<Output = Result<(), IngestionError>> + Send {
+        self.delete_segment(segment_id)
     }
 }
 
