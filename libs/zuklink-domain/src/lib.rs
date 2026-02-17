@@ -50,5 +50,7 @@
 /// }
 /// ```
 pub mod ingestion;
-pub mod ports;
 pub mod storage;
+
+// Re-export ports for convenient access
+pub use storage::ports;
